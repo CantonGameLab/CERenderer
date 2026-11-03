@@ -1,0 +1,192 @@
+package render
+
+import "core:fmt"
+import s3 "vendor:sdl3"
+import gl "vendor:OpenGL"
+import "core:c"
+import "core:os"
+import "core:strings"
+import "core:math/linalg"
+import me "../memory/"
+import sam "../scene/"
+
+INIT_WINDOW_WIDTH :: 1920
+INIT_WINDOW_HEIGHT :: 1080
+INIT_WINDOW_TITLE :: "CERenderer"
+
+window_width : i32
+window_height : i32
+
+window : ^s3.Window
+gl_context : s3.GLContext
+
+
+InitShader :: proc() {
+	initPBR()
+	initAfter()
+	initPreDepthTest()
+	initShadowMapping()
+	initBloom()
+}
+
+GetWindowSize :: proc() -> (w : i32, h : i32) {
+	cw, ch : c.int
+	s3.GetWindowSizeInPixels(window, &cw, &ch)
+	w = i32(cw)
+	h = i32(ch)
+	return
+}
+
+Render :: proc() {
+	w, h := GetWindowSize()
+
+	if (w != window_width || h != window_height) && w > 0 && h > 0 {
+		window_width = w
+		window_height = h
+		setAfterWindowSize()
+	}
+
+	gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
+	gl.Clear(gl.DEPTH_BUFFER_BIT | gl.COLOR_BUFFER_BIT)
+
+	RasterizeShadowMap()
+	UniformShadowMapping()
+	bindAfter()
+	drawDepthBuffer()
+	drawPBR()
+	resolveAfter()
+	resolveBloom()
+	BlitToFramebuffer(0, after.tex_resolved, window_width, window_height)
+}
+
+linkProgram :: proc(vs : u32, fs : u32) -> (program : u32) {
+	program = gl.CreateProgram()
+	gl.AttachShader(program, vs)
+	gl.AttachShader(program, fs)
+
+	gl.LinkProgram(program)
+	
+	status : i32
+	gl.GetProgramiv(program, gl.LINK_STATUS, &status)
+	
+	if status == 0 {
+		buf : [2048]byte
+		gl.GetProgramInfoLog(program, i32(len(buf)), nil, &buf[0])
+		fmt.eprintln("link program error", string(buf[:]))
+		gl.DeleteProgram(program)
+		return 0
+	}
+
+	return program
+}
+
+compileShader :: proc(shader_kind : u32, path : string) -> u32 {
+	data, err := os.read_entire_file_from_path(path, context.allocator)
+	defer delete(data)
+	
+	if err != nil {
+		fmt.eprintln("so we met a big problem that we can't find your shader source file from a path!")
+		return 0
+	}
+	src := strings.clone_to_cstring(string(data), context.allocator)
+	defer delete(src)
+
+	srcs := [?]cstring{src}
+
+	shader := gl.CreateShader(shader_kind)
+	gl.ShaderSource(shader, 1, raw_data(srcs[:]), nil)
+	gl.CompileShader(shader)
+	status : i32
+	gl.GetShaderiv(shader, gl.COMPILE_STATUS, &status)
+	if status == 0 {
+		buf : [2048]byte
+		gl.GetShaderInfoLog(shader, i32(len(buf)), nil, &buf[0])
+		fmt.eprintln("the fucking shader CAN'T be converted by the GL compilor into a bunch of shit bytecode that can be executed by the GPU(maybe a erotic RTX5090 just like a stunner of G cup and smooth pussy). A JIT would have compiled the same shit at runtime, called it a feature, and blamed deoptimization when it ran slow. You don't even get that excuse.", string(buf[:]))
+		gl.DeleteShader(shader)
+		return 0
+	}
+	return shader
+}
+
+
+Init :: proc() -> bool {
+
+	s3.GL_SetAttribute(.CONTEXT_MAJOR_VERSION, 4)
+	s3.GL_SetAttribute(.CONTEXT_MINOR_VERSION, 4)
+	s3.GL_SetAttribute(.CONTEXT_PROFILE_MASK, c.int(s3.GLProfile{.CORE}))
+	s3.GL_SetAttribute(.DOUBLEBUFFER, 1)
+	s3.GL_SetAttribute(.MULTISAMPLEBUFFERS, 1)
+	s3.GL_SetAttribute(.MULTISAMPLESAMPLES, 4)
+	// Asked for, then checked further down. The window's colour buffer has to be an sRGB
+	// format or glEnable(GL_FRAMEBUFFER_SRGB) does nothing at all and says nothing about it.
+	s3.GL_SetAttribute(.FRAMEBUFFER_SRGB_CAPABLE, 1)
+
+	if !s3.Init({.VIDEO}) {
+		fmt.eprintln("SDL3 init failed. Guess what? I won't serve you anymore! GO using other terminal emulator such as the WINDOW TERMINAL. This is who specially prepared for users like YOU.", s3.GetError())
+		return false
+	}
+
+	window = s3.CreateWindow(
+		INIT_WINDOW_TITLE,
+		INIT_WINDOW_WIDTH,
+		INIT_WINDOW_HEIGHT,
+		s3.WINDOW_OPENGL | s3.WINDOW_RESIZABLE
+	)
+
+	window_width = INIT_WINDOW_WIDTH
+	window_height = INIT_WINDOW_HEIGHT
+
+	if window == nil {
+		fmt.eprintln("FAILED FAILED and FAILED. You can't just create A window! Congratulations!", s3.GetError())
+		fmt.eprintln("If this is the FRAMEBUFFER_SRGB_CAPABLE request above, delete that line: the renderer will start without an sRGB window, but its output will be too dark.")
+		return false
+	}
+
+	gl_context = s3.GL_CreateContext(window)
+	if gl_context == nil {
+		fmt.eprintln("The Khronos say: You don's even deserve to have an available GL_Context.", s3.GetError())
+		fmt.eprintln("If this is the FRAMEBUFFER_SRGB_CAPABLE request above, delete that line: the renderer will start without an sRGB window, but its output will be too dark.")
+		return false
+	}
+
+	if !s3.GL_MakeCurrent(window, gl_context) {
+		fmt.eprintln("The Khronos say: Even if you have a GL_Context, you don't deserve to bind it.", s3.GetError())
+		return false
+	}
+
+	gl.load_up_to(
+		4,
+		4,
+		proc(p : rawptr, name : cstring) {
+			(cast(^rawptr)p)^ = cast(rawptr)s3.GL_GetProcAddress(name)
+		}
+	)
+	//set the vsync
+	s3.GL_SetSwapInterval(1) 
+	
+	gl.Enable(gl.DEPTH_TEST)
+	gl.Enable(gl.MULTISAMPLE)
+	gl.Enable(gl.CULL_FACE)
+
+	// The lighting shader hands on linear radiance and fullscreen.frag ends in a value for an
+	// sRGB display, so the window's colour buffer is where that value gets encoded.
+	//
+	// The check is against SDL's answer and not against the GL one. Measured on this driver:
+	// glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_BACK_LEFT,
+	// GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING) returns GL_LINEAR while a glClear of 0.5
+	// demonstrably lands as 188, so the GL query reports the pixel format's declared encoding
+	// rather than what the write does, and asserting on it would fire on a pipeline that is
+	// working. SDL's attribute answers "is the visual sRGB capable", which is the condition the
+	// encode actually depends on.
+	gl.Enable(gl.FRAMEBUFFER_SRGB)
+	srgb_capable : i32
+	s3.GL_GetAttribute(.FRAMEBUFFER_SRGB_CAPABLE, &srgb_capable)
+	if srgb_capable != 1 {
+		fmt.eprintln("[!] the window is not sRGB capable, so GL_FRAMEBUFFER_SRGB does nothing and the image will be too dark. Remove the FRAMEBUFFER_SRGB_CAPABLE request in render.Init, or the request and the driver disagree.")
+	}
+	
+	gl.CullFace(gl.BACK)
+	gl.FrontFace(gl.CCW)
+
+	return true
+}
