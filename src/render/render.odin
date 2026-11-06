@@ -24,9 +24,11 @@ gl_context : s3.GLContext
 InitShader :: proc() {
 	initPBR()
 	initAfter()
+	initPreprocess()
 	initPreDepthTest()
 	initShadowMapping()
 	initBloom()
+	initOutline()
 }
 
 GetWindowSize :: proc() -> (w : i32, h : i32) {
@@ -44,6 +46,7 @@ Render :: proc() {
 		window_width = w
 		window_height = h
 		setAfterWindowSize()
+		setPreprocessWindowSize()
 	}
 
 	gl.BindFramebuffer(gl.FRAMEBUFFER, 0)
@@ -53,7 +56,9 @@ Render :: proc() {
 	UniformShadowMapping()
 	bindAfter()
 	drawDepthBuffer()
+	resolvePreprocess()
 	drawPBR()
+	drawOutline()
 	resolveAfter()
 	resolveBloom()
 	BlitToFramebuffer(0, after.tex_resolved, window_width, window_height)

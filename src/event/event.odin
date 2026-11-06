@@ -1,7 +1,6 @@
 package event
 
 import s3 "vendor:sdl3"
-import "../gui/"
 
 quit_requested: bool
 
@@ -16,10 +15,10 @@ InputState :: struct {
 Input_State : InputState
 Focus_Lost : b8
 
-Poll :: proc() -> bool {
+Poll :: proc(handle_event : proc(e : ^s3.Event)) -> bool {
 	for e: s3.Event; s3.PollEvent(&e); {
 
-		gui.ProcessEventGUI(&e)
+		handle_event(&e)
 
 		#partial switch e.type {
 		case .QUIT, .WINDOW_CLOSE_REQUESTED:

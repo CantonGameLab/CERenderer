@@ -176,4 +176,6 @@ Update :: proc(delta : f64) {
 	position += {move_world.x, move_world.y, move_world.z}
 
 	sam.Main_Camera.transform = world
+
 }
+

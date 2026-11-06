@@ -29,7 +29,7 @@ main :: proc() {
 		delta := now_seconds - last_seconds
 
 		event.FlushInputState()
-		if event.Poll() {
+		if event.Poll(gui.ProcessEventGUI) {
 			break
 		}
 
