@@ -1,5 +1,7 @@
 package event
 
+import im_gl3 "vendor:imgui/backends/opengl3"
+import im_sdl3 "vendor:imgui/backends/sdl3"
 import s3 "vendor:sdl3"
 
 quit_requested: bool
@@ -15,10 +17,10 @@ InputState :: struct {
 Input_State : InputState
 Focus_Lost : b8
 
-Poll :: proc(handle_event : proc(e : ^s3.Event)) -> bool {
+Poll :: proc() -> bool {
 	for e: s3.Event; s3.PollEvent(&e); {
 
-		handle_event(&e)
+		im_sdl3.ProcessEvent(&e)
 
 		#partial switch e.type {
 		case .QUIT, .WINDOW_CLOSE_REQUESTED:

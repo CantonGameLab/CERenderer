@@ -92,7 +92,7 @@ METALLIC_ROUGHNESS_TEXTURE_UNIT :: 5
 
 ambient : f32 = 0.12
 
-program : PBRProgram
+pbr : PBRProgram
 
 solid_draw_list : [dynamic]DrawIterm
 transparent_draw_list : [dynamic]DrawIterm
@@ -102,7 +102,7 @@ drawPBR :: proc() {
 	defer clear(&solid_draw_list)
 	defer clear(&transparent_draw_list)
 
-	gl.UseProgram(program.program)
+	gl.UseProgram(pbr.program)
 
 	aspect := f32(window_width) / f32(window_height)
 
@@ -113,10 +113,10 @@ drawPBR :: proc() {
 	proj_view := linalg.mul(proj_matrix, view_matrix)
 
 
-	gl.UniformMatrix4fv(program.m_view, 1, false, &view_matrix[0,0])
-	gl.UniformMatrix4fv(program.m_proj, 1, false, &proj_matrix[0,0])
-	gl.UniformMatrix4fv(program.u_camera_transform, 1, false, &sam.Main_Camera.transform[0,0])
-	gl.Uniform1f(program.u_ambient, ambient)
+	gl.UniformMatrix4fv(pbr.m_view, 1, false, &view_matrix[0,0])
+	gl.UniformMatrix4fv(pbr.m_proj, 1, false, &proj_matrix[0,0])
+	gl.UniformMatrix4fv(pbr.u_camera_transform, 1, false, &sam.Main_Camera.transform[0,0])
+	gl.Uniform1f(pbr.u_ambient, ambient)
 
 	main_camera_position := [3]f32{ 
 		sam.Main_Camera.transform[0, 3], 
@@ -228,10 +228,10 @@ drawPrimitves :: proc(draw_list : []DrawIterm) {
 
 		if index == 0 || draw_list[index - 1].node_id != draw_list[index].node_id {
 			// When the index switches to a different node, we re-upload all the parameters related to the node
-			gl.UniformMatrix4fv(program.m_model, 1, false, &node.transform[0,0])
+			gl.UniformMatrix4fv(pbr.m_model, 1, false, &node.transform[0,0])
 			m3 := linalg.matrix3_from_matrix4_f32(node.transform)
 			normal_matrix := linalg.transpose(linalg.matrix3_inverse_f32(m3))
-			gl.UniformMatrix3fv(program.m_normal, 1, false, &normal_matrix[0,0])
+			gl.UniformMatrix3fv(pbr.m_normal, 1, false, &normal_matrix[0,0])
 		}
 
 		p := &mesh.primitives[draw_iterm.primitive_id]
@@ -243,21 +243,21 @@ drawPrimitves :: proc(draw_list : []DrawIterm) {
 		has_normal := i32(mat.normal_texture.texture_id != 0)
 		has_mr := i32(mat.pbr.metallic_roughness_texture.texture_id != 0)
 
-		uploadTexture(0, mat.base_color_texture.texture_id, program.u_base_color_texture)
-		uploadTexture(NORMAL_TEXTURE_UNIT, mat.normal_texture.texture_id, program.u_normal_texture)
-		uploadTexture(METALLIC_ROUGHNESS_TEXTURE_UNIT, mat.metallic_roughness_texture.texture_id, program.u_metallic_roughness_texture)
-		gl.Uniform1i(program.u_has_normal_texture, has_normal)
-		gl.Uniform1f(program.u_normal_scale, mat.normal_texture.scale)
-		gl.Uniform1f(program.u_metallic_factor, mat.metallic_factor)
-		gl.Uniform1f(program.u_roughness_factor, mat.roughness_factor)
-		gl.Uniform1i(program.u_has_metallic_roughness_texture, has_mr)
-		gl.Uniform4fv(program.u_base_color_factor, 1, raw_data(&mat.base_color_factor))
-		gl.Uniform1i(program.u_has_base_color_texture, has_tex)
-		gl.Uniform3fv(program.u_emissive_factor, 1, raw_data(&mat.emissive_factor))
-		gl.Uniform1f(program.u_emissive_strength, mat.emissive_strength)
-		gl.Uniform1i(program.u_double_sided, i32(mat.double_sided))
-		gl.Uniform1i(program.u_alpha_mode, i32(mat.alpha_mode))
-		gl.Uniform1f(program.u_alpha_cutoff, mat.alpha_cutoff)
+		uploadTexture(0, mat.base_color_texture.texture_id, pbr.u_base_color_texture)
+		uploadTexture(NORMAL_TEXTURE_UNIT, mat.normal_texture.texture_id, pbr.u_normal_texture)
+		uploadTexture(METALLIC_ROUGHNESS_TEXTURE_UNIT, mat.metallic_roughness_texture.texture_id, pbr.u_metallic_roughness_texture)
+		gl.Uniform1i(pbr.u_has_normal_texture, has_normal)
+		gl.Uniform1f(pbr.u_normal_scale, mat.normal_texture.scale)
+		gl.Uniform1f(pbr.u_metallic_factor, mat.metallic_factor)
+		gl.Uniform1f(pbr.u_roughness_factor, mat.roughness_factor)
+		gl.Uniform1i(pbr.u_has_metallic_roughness_texture, has_mr)
+		gl.Uniform4fv(pbr.u_base_color_factor, 1, raw_data(&mat.base_color_factor))
+		gl.Uniform1i(pbr.u_has_base_color_texture, has_tex)
+		gl.Uniform3fv(pbr.u_emissive_factor, 1, raw_data(&mat.emissive_factor))
+		gl.Uniform1f(pbr.u_emissive_strength, mat.emissive_strength)
+		gl.Uniform1i(pbr.u_double_sided, i32(mat.double_sided))
+		gl.Uniform1i(pbr.u_alpha_mode, i32(mat.alpha_mode))
+		gl.Uniform1f(pbr.u_alpha_cutoff, mat.alpha_cutoff)
 		gl.BindVertexArray(p.gl_vao_id)
 		gl.DrawElements(gl.TRIANGLES, i32(p.indices_count), gl.UNSIGNED_INT, nil)
 	}
@@ -275,37 +275,37 @@ drawPrimitves :: proc(draw_list : []DrawIterm) {
 }
 
 initPBR :: proc() {
-	program.vs = compileShader(gl.VERTEX_SHADER, "resource/shaders/pbr.vert")
-	program.fs = compileShader(gl.FRAGMENT_SHADER, "resource/shaders/pbr.frag")
-	program.program = linkProgram(program.vs, program.fs)
-	program.m_proj = gl.GetUniformLocation(program.program, cstring("m_proj"))
-	program.m_view = gl.GetUniformLocation(program.program, cstring("m_view"))
-	program.m_model = gl.GetUniformLocation(program.program, cstring("m_model"))
-	program.m_normal = gl.GetUniformLocation(program.program, cstring("m_normal"))
-	program.u_base_color_factor = gl.GetUniformLocation(program.program, cstring("u_base_color_factor"))
-	program.u_base_color_texture = gl.GetUniformLocation(program.program, cstring("u_base_color_texture"))
-	program.u_has_base_color_texture = gl.GetUniformLocation(program.program, cstring("u_has_base_color_texture"))
-	program.u_normal_texture = gl.GetUniformLocation(program.program, cstring("u_normal_texture"))
-	program.u_has_normal_texture = gl.GetUniformLocation(program.program, cstring("u_has_normal_texture"))
-	program.u_normal_scale = gl.GetUniformLocation(program.program, cstring("u_normal_scale"))
-	program.u_emissive_factor = gl.GetUniformLocation(program.program, cstring("u_emissive_factor"))
-	program.u_emissive_strength = gl.GetUniformLocation(program.program, cstring("u_emissive_strength"))
-	program.u_ambient = gl.GetUniformLocation(program.program, cstring("u_ambient"))
-	program.u_camera_transform = gl.GetUniformLocation(program.program, cstring("u_camera_transform"))
-	program.u_shininess = gl.GetUniformLocation(program.program, cstring("u_shininess"))
-	program.u_specular_strength = gl.GetUniformLocation(program.program, cstring("u_specular_strength"))
-	program.u_double_sided = gl.GetUniformLocation(program.program, cstring("u_double_sided"))
-	program.u_alpha_mode = gl.GetUniformLocation(program.program, cstring("u_alpha_mode"))
-	program.u_alpha_cutoff = gl.GetUniformLocation(program.program, cstring("u_alpha_cutoff"))
-	program.u_has_metallic_roughness_texture = gl.GetUniformLocation(program.program, cstring("u_has_metallic_roughness_texture"))
-	program.u_metallic_roughness_texture = gl.GetUniformLocation(program.program, cstring("u_metallic_roughness_texture"))
-	program.u_metallic_factor = gl.GetUniformLocation(program.program, cstring("u_metallic_factor"))
-	program.u_roughness_factor = gl.GetUniformLocation(program.program, cstring("u_roughness_factor"))
+	pbr.vs = compileShader(gl.VERTEX_SHADER, "resource/shaders/pbr.vert")
+	pbr.fs = compileShader(gl.FRAGMENT_SHADER, "resource/shaders/pbr.frag")
+	pbr.program = linkProgram(pbr.vs, pbr.fs)
+	pbr.m_proj = gl.GetUniformLocation(pbr.program, cstring("m_proj"))
+	pbr.m_view = gl.GetUniformLocation(pbr.program, cstring("m_view"))
+	pbr.m_model = gl.GetUniformLocation(pbr.program, cstring("m_model"))
+	pbr.m_normal = gl.GetUniformLocation(pbr.program, cstring("m_normal"))
+	pbr.u_base_color_factor = gl.GetUniformLocation(pbr.program, cstring("u_base_color_factor"))
+	pbr.u_base_color_texture = gl.GetUniformLocation(pbr.program, cstring("u_base_color_texture"))
+	pbr.u_has_base_color_texture = gl.GetUniformLocation(pbr.program, cstring("u_has_base_color_texture"))
+	pbr.u_normal_texture = gl.GetUniformLocation(pbr.program, cstring("u_normal_texture"))
+	pbr.u_has_normal_texture = gl.GetUniformLocation(pbr.program, cstring("u_has_normal_texture"))
+	pbr.u_normal_scale = gl.GetUniformLocation(pbr.program, cstring("u_normal_scale"))
+	pbr.u_emissive_factor = gl.GetUniformLocation(pbr.program, cstring("u_emissive_factor"))
+	pbr.u_emissive_strength = gl.GetUniformLocation(pbr.program, cstring("u_emissive_strength"))
+	pbr.u_ambient = gl.GetUniformLocation(pbr.program, cstring("u_ambient"))
+	pbr.u_camera_transform = gl.GetUniformLocation(pbr.program, cstring("u_camera_transform"))
+	pbr.u_shininess = gl.GetUniformLocation(pbr.program, cstring("u_shininess"))
+	pbr.u_specular_strength = gl.GetUniformLocation(pbr.program, cstring("u_specular_strength"))
+	pbr.u_double_sided = gl.GetUniformLocation(pbr.program, cstring("u_double_sided"))
+	pbr.u_alpha_mode = gl.GetUniformLocation(pbr.program, cstring("u_alpha_mode"))
+	pbr.u_alpha_cutoff = gl.GetUniformLocation(pbr.program, cstring("u_alpha_cutoff"))
+	pbr.u_has_metallic_roughness_texture = gl.GetUniformLocation(pbr.program, cstring("u_has_metallic_roughness_texture"))
+	pbr.u_metallic_roughness_texture = gl.GetUniformLocation(pbr.program, cstring("u_metallic_roughness_texture"))
+	pbr.u_metallic_factor = gl.GetUniformLocation(pbr.program, cstring("u_metallic_factor"))
+	pbr.u_roughness_factor = gl.GetUniformLocation(pbr.program, cstring("u_roughness_factor"))
 
-	gl.UseProgram(program.program)
-	gl.Uniform1i(program.u_base_color_texture, 0)
-	gl.Uniform1i(program.u_normal_texture, NORMAL_TEXTURE_UNIT)
-	gl.Uniform1i(program.u_metallic_roughness_texture, METALLIC_ROUGHNESS_TEXTURE_UNIT)
-	gl.Uniform1f(program.u_shininess, 64.0)
-	gl.Uniform1f(program.u_specular_strength, 0.35)
+	gl.UseProgram(pbr.program)
+	gl.Uniform1i(pbr.u_base_color_texture, 0)
+	gl.Uniform1i(pbr.u_normal_texture, NORMAL_TEXTURE_UNIT)
+	gl.Uniform1i(pbr.u_metallic_roughness_texture, METALLIC_ROUGHNESS_TEXTURE_UNIT)
+	gl.Uniform1f(pbr.u_shininess, 64.0)
+	gl.Uniform1f(pbr.u_specular_strength, 0.35)
 }

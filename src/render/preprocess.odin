@@ -4,13 +4,16 @@ import gl "vendor:OpenGL"
 
 Preprocess :: struct {
 	tex_depth : u32,
-	fbo_depth : u32,
+	tex_color : u32,
+	fbo : u32,
 }
+
+
 
 preprocess : Preprocess
 
 initPreprocess :: proc() {
-	gl.GenFramebuffers(1, &preprocess.fbo_depth)
+	gl.GenFramebuffers(1, &preprocess.fbo)
 	setPreprocessWindowSize()
 }
 
@@ -35,7 +38,7 @@ setPreprocessWindowSize :: proc() {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
-	gl.BindFramebuffer(gl.FRAMEBUFFER, preprocess.fbo_depth)
+	gl.BindFramebuffer(gl.FRAMEBUFFER, preprocess.fbo)
 	gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, preprocess.tex_depth, 0)
 	gl.DrawBuffer(gl.NONE)
 	gl.ReadBuffer(gl.NONE)
@@ -52,7 +55,7 @@ setPreprocessWindowSize :: proc() {
 
 resolvePreprocess :: proc() {
 	gl.BindFramebuffer(gl.READ_FRAMEBUFFER, after.multisample_fbo)
-	gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, preprocess.fbo_depth)
+	gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, preprocess.fbo)
 	gl.BlitFramebuffer(
 		0, 0, window_width, window_height,
 		0, 0, window_width, window_height,

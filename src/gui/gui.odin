@@ -7,7 +7,6 @@ import im_gl3 "vendor:imgui/backends/opengl3"
 import im_sdl3 "vendor:imgui/backends/sdl3"
 import render "../render"
 
-imgui_initialized : bool
 bloom_strength_location : i32
 
 rgb :: proc(hex: u32, alpha : f32 = 1.0) -> im.Vec4 {
@@ -144,19 +143,12 @@ InitGUI :: proc() -> bool {
 	if !im_gl3.Init(cstring("#version 440 core")) do return false
 
 	bloom_strength_location = gl.GetUniformLocation(render.blit_program, cstring("u_bloom_strength"))
-	imgui_initialized = true
 	return true
 }
 
-ProcessEventGUI :: proc(e : ^s3.Event) {
-	if !imgui_initialized do return
-	im_sdl3.ProcessEvent(e)
-}
 
 GUI :: proc() {
 
-	//Set the new frame
-	if !imgui_initialized do return
 	im_gl3.NewFrame()
 	im_sdl3.NewFrame()
 	im.NewFrame()
@@ -182,7 +174,6 @@ GUI :: proc() {
 
 
 RenderGUI :: proc() {
-	if !imgui_initialized do return
 
 	im.Render()
 	draw_data := im.GetDrawData()

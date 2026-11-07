@@ -25,38 +25,41 @@ LightCamera :: struct {
 }
 
 DirectionLight :: struct {
-	using param : BasicLightParam,
+	using param : LightParam,
 	direction:             [3]f32,
-	gl_shadow_map_texture: u32,
-	gl_shadow_map_fbo:     u32,
 	half_extent : f32,
 }
 
 PointLight :: struct {
-	using param : BasicLightParam,
-
+	using param : LightParam,
 	range : f32,
-	light_node_id:         u32,
-	gl_shadow_map_fbo:     u32,
-	gl_shadow_map_texture: u32,
-	gl_shadow_depth_texture: u32,
+	light_node_index:         u32,
 	proj_views : [6]Transform,
 }
 
 SpotLight :: struct {
-	using param : BasicLightParam,
+	using param : LightParam,
 	direction:             [3]f32,
 	range:                 f32,
 	inner_cone_angle:      f32,
 	outer_cone_angle:      f32,
 }
 
-BasicLightParam :: struct {
+LightParam :: struct {
 	position : [3]f32,
 	color: [3]f32,
 	intensity : f32,
 	pcss_width : f32,
 	using camera : LightCamera,
+	using light_fbo : LightFBO,
+}
+
+LightFBO :: struct {
+	fbo : u32,
+	tex_distance : u32,
+	tex_normal : u32,
+	tex_radiance : u32,
+	tex_position : u32,
 }
 
 direction_lights: me.Array(MAX_LIGHT_COUNT + 1, DirectionLight)
